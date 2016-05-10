@@ -8,10 +8,15 @@ var spawn = require("child_process").spawn;
 
 var config = require("../config.js");
 
+var superagent = require("superagent");
+
 var upload = multer({dest: config.UPLOADS_DIR});
 
+var async = require("async");
 
-var kue = require('kue');
+var kue = require("kue");
+
+var fs = require("fs");
 
 queue = kue.createQueue();
 
@@ -43,57 +48,87 @@ queue.process("order", function(job, done) {
 
     var OPENCV_DIR = config.OPENCV_DIR ;
     var MONGODB_LOADER_PATH = config.MONGODB_LOADER_PATH;
-
-
-
     var conversion_command = "java -Djava.library.path=" + OPENCV_DIR + " -jar " + MONGODB_LOADER_PATH + " --inptype maskfile --inpfile " + filePath + " --dest file --outfolder temp/ --eid " + execution_id + " --etype challenge --cid " + case_id ;
-
     winston.log("info", "Executing: " + conversion_command);
-    
-    try { 
+    try {
         exec(conversion_command, function(error, stdout, stderr){
-
-            if(error){
+            if(error) {
                 winston.log("error", "Converter error");
                 winston.log("error", error);       
                 done("E"+error);
                 return;
-                //return res.status(500).send("Error executing converter" + error);
             }
             if(stderr) {
                 winston.log("error", "Converter error");
                 winston.log("error", stderr);       
                 done("E2"+stderr);
                 return;
-                //return res.status(500).send("Error executing converter" +stderr);
             }
-
             winston.log("info", "Converter output");
             winston.log("info", stdout);
-
+            console.log(filePath);
+            var fileName = filePath.split("/");
+            fileName = fileName[fileName.length -1];
+            console.log(fileName);
             //POST the file to Bindaas
+            var bindaas_host = config.bindaas_host;
+            var bindaas_project = config.bindaas_project;
+            var bindaas_provider = config.bindaas_provider;
+            var bindaas_api_key = config.bindaas_api_key;                
+            var file = "temp/"+fileName+".json";
+            var lineReader = require("readline").createInterface({
+                input: require('fs').createReadStream(file),
+                terminal: false
+            });
+            var lines = 0;
+            var payLoads = [];
+            var postFunctions = [];
+            fs.unlink(filePath, function(err){
+                if(err) throw err;
+                console.log("deleted original maskfile: "+filePath);
             
-        
-            console.log("........");
-            //Delete the file
-            done();
+                     lineReader.on('line', function(line){
+                    console.log("............");
+                    payLoads.push(JSON.parse(line));
+                    lines++;
+                    console.log(lines);
             
-           
-        });
-    }
-    catch(e) {
-
+                    
+                }).on('close', function() {
+                    fs.unlink(file, function(err){
+                        if(err) throw err;
+                        console.log("deleted "+file);
+                        async.map(payLoads, function(payLoad, cb){
+                            superagent.post(bindaas_host + bindaas_project + bindaas_provider +"/submit/jsonFile?api_key="+bindaas_api_key)
+                            .send(payLoad)
+                            .end(function(err, res){
+                                if(err) {
+                                    console.log(err);
+                                    //done(err);
+                                } else {
+                                    console.log("........");
+                                    console.log(payLoad.length);
+                                }
+                                cb(null, "...");
+                            });                   
+                        }, function(err, results){
+                            console.log(err);
+                            console.log("Finished executing order!");
+                            done();
+                        });               
+                    });
+                });
+            });
+        })
+    } catch(e) {
         winston.log("error", "Converter error");
         winston.log("error", e);
         done(e);
         return;
     }
-
 });
 
 router.post('/postAnnotation', upload.single('mask'), function(req, res, next){
-
-
 
     var maskFile = req.file;
     var case_id = req.body.case_id;
@@ -105,51 +140,21 @@ router.post('/postAnnotation', upload.single('mask'), function(req, res, next){
         var job = queue.create("order", {
             maskFilePath: filePath,
             case_id: case_id,
+            title: "Case_id: "+case_id + " Execution_id: "+execution_id,
             execution_id: execution_id
-        }).save();
-        console.log(job)
-        return res.send("Created order");
+        }).save(function(err){
+            if(!err){
 
-        /*      
-        var conversion_command = "java -Djava.library.path=" + OPENCV_DIR + " -jar " + MONGODB_LOADER_PATH + " --inptype maskfile --inpfile " + filePath + " --dest file --outfolder temp/ --eid " + userId + " --etype challenge --cid " + imageId ;
+                console.log(job)
+                return res.json({
+                    "Status": "Queued", "Job": job,
+                    "id": job.id
+                });
+            } else {
+                return res.status(500).json({"Status": "Failed"});
+            }
 
-        winston.log("info", "Executing: " + conversion_command);
-        
-        try { 
-            exec(conversion_command, function(error, stdout, stderr){
-
-                if(error){
-                    winston.log("error", "Converter error");
-                    winston.log("error", error);       
-                    return res.status(500).send("Error executing converter" + error);
-                }
-                if(stderr) {
-                    winston.log("error", "Converter error");
-                    winston.log("error", error);       
-                    return res.status(500).send("Error executing converter" +stderr);
-                }
-
-                winston.log("info", "Converter output");
-                winston.log("info", stdout);
-
-                //POST the file to Bindaas
-                
-            
-
-                //Delete the file
-
-                
-                res.json({"Status": "Success"});
-            });
-        }
-        catch(e) {
-
-            winston.log("error", "Converter error");
-            winston.log("error", e);
-            res.status(500).send("Error executing converter "+e);
-        }
-        */
-
+        });
 
     } else {
         var error_str = "";
