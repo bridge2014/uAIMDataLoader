@@ -1,0 +1,21 @@
+
+exports.UPLOADS_DIR =  "/root/";
+
+var bindaas_host = "http://dragon.cci.emory.edu:9099/services";
+var bindaas_project = "/caMicroscopeContainer";
+var bindaas_provider = "/AnnotationsLoader";
+var bindaas_api_key = "xxxxxx-xxxxx-xxxxx-xxxxx-xxx";
+
+
+
+/* No trailing slashes */
+
+exports.bindaas_host = bindaas_host;
+exports.bindaas_project = bindaas_project;
+exports.bindaas_provider = bindaas_provider;
+exports.bindaas_api_key = bindaas_api_key;
+
+
+exports.MASK_TO_POLY_JAR_PATH = "/root/nuclear-segmentation-results/build/libs/mask-to-polygon-1.3.jar";
+exports.MONGODB_LOADER_PATH = "/root/nuclear-segmentation-results/build/libs/mongodb-loader-1.3.jar"; 
+exports.OPENCV_DIR = "/root/OpenCV/opencv-3.0.0/build/lib";
