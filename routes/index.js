@@ -39,13 +39,59 @@ router.get('/', function(req, res, next) {
 
 i*/
 
-queue.process("order", function(job, done) {
-    console.log("Executing "+job.data.case_id);
+var parseGeoJSONFileAndClean = function parseGeoJSONFileAndClean(maskFilePath, callback){
+    var maskFilePath = maskFilePath;
+    var maskFileName = maskFilePath.split("/");
+    maskFileName = maskFileName[maskFileName.length - 1];
+    var geoJSONFile = "temp/" + maskFileName + ".json";
 
+    var lineReader = require("readline").createInterface({
+        input: fs.createReadStream(geoJSONFile),
+        terminal: false
+    });
+    var payLoads = [];
+    try{
+    fs.unlink(maskFilePath, function(err){  // Delete original mask file
+        if(err) throw err;
+        var lines=0;
+        lineReader.on('line', function(line){   // Read GeoJSON File
+            console.log("............");
+            payLoads.push(JSON.parse(line));
+            lines++;
+            console.log(lines);           
+        }).on('close', function() {
+            fs.unlink(geoJSONFile, function(err){
+                if(err) throw err;
+                callback(err, payLoads);
+            })
+        });
+    });
+    } catch(err) {
+        callback(err);
+    }
+}
+
+var postMarkupToBindaas = function postMarkupToBindaas(payLoad, callback) {
+    var bindaas_host = config.bindaas_host;
+    var bindaas_project = config.bindaas_project;
+    var bindaas_provider = config.bindaas_provider;
+    var bindaas_api_key = config.bindaas_api_key;                
+    
+
+    var url = bindaas_host + bindaas_project + bindaas_provider + "/submit/json?api_key="+bindaas_api_key;
+    superagent.post(url)
+        .send(payLoad)
+        .end(function(err, res){
+            callback(err,res);
+        });    
+
+};
+
+queue.process("MaskOrder", function(job, done) {
+    console.log("Executing "+job.data.case_id);
     var case_id = job.data.case_id;
     var execution_id = job.data.execution_id;
     var filePath=  job.data.maskFilePath;
-
     var OPENCV_DIR = config.OPENCV_DIR ;
     var MONGODB_LOADER_PATH = config.MONGODB_LOADER_PATH;
     var conversion_command = "java -Djava.library.path=" + OPENCV_DIR + " -jar " + MONGODB_LOADER_PATH + " --inptype maskfile --inpfile " + filePath + " --dest file --outfolder temp/ --eid " + execution_id + " --etype challenge --cid " + case_id ;
@@ -54,7 +100,7 @@ queue.process("order", function(job, done) {
         exec(conversion_command, function(error, stdout, stderr){
             if(error) {
                 winston.log("error", "Converter error");
-                winston.log("error", error);       
+                inston.log("error", error);       
                 done("E"+error);
                 return;
             }
@@ -66,60 +112,26 @@ queue.process("order", function(job, done) {
             }
             winston.log("info", "Converter output");
             winston.log("info", stdout);
-            console.log(filePath);
-            var fileName = filePath.split("/");
-            fileName = fileName[fileName.length -1];
-            console.log(fileName);
-            //POST the file to Bindaas
-            var bindaas_host = config.bindaas_host;
-            var bindaas_project = config.bindaas_project;
-            var bindaas_provider = config.bindaas_provider;
-            var bindaas_api_key = config.bindaas_api_key;                
-            var file = "temp/"+fileName+".json";
-            var lineReader = require("readline").createInterface({
-                input: require('fs').createReadStream(file),
-                terminal: false
-            });
-            var lines = 0;
-            var payLoads = [];
-            var postFunctions = [];
-            fs.unlink(filePath, function(err){
-                if(err) throw err;
-                console.log("deleted original maskfile: "+filePath);
-            
-                     lineReader.on('line', function(line){
-                    console.log("............");
-                    payLoads.push(JSON.parse(line));
-                    lines++;
-                    console.log(lines);
-            
-                    
-                }).on('close', function() {
-                    fs.unlink(file, function(err){
-                        if(err) throw err;
-                        console.log("deleted "+file);
-                        async.map(payLoads, function(payLoad, cb){
-                            superagent.post(bindaas_host + bindaas_project + bindaas_provider +"/submit/jsonFile?api_key="+bindaas_api_key)
-                            .send(payLoad)
-                            .end(function(err, res){
-                                if(err) {
-                                    console.log(err);
-                                    //done(err);
-                                } else {
-                                    console.log("........");
-                                    console.log(payLoad.length);
-                                }
-                                cb(null, "...");
-                            });                   
-                        }, function(err, results){
-                            console.log(err);
-                            console.log("Finished executing order!");
-                            done();
-                        });               
+            parseGeoJSONFileAndClean(filePath, function(err, payLoads){
+                async.map(payLoads, function(payLoad, cb){
+                    postMarkupToBindaas(payLoad, function(err, post_response){
+                        if(err.statusCode != 200){
+                            done(err); //Send error to Kue
+                            return; 
+                        } else {
+                            cb(null);
+                        }
                     });
-                });
+                }
+                , function(err, results){
+                    console.log("Finished");
+                    done(err);
+                })
+                
             });
-        })
+        });
+        
+    
     } catch(e) {
         winston.log("error", "Converter error");
         winston.log("error", e);
@@ -128,16 +140,19 @@ queue.process("order", function(job, done) {
     }
 });
 
-router.post('/postAnnotation', upload.single('mask'), function(req, res, next){
+
+router.post('/submitMarkupOrder', upload.single('markup'), function(req, res, next){
+    postMarkupToBindaas();
+});
+
+router.post('/submitMaskOrder', upload.single('mask'), function(req, res, next){
 
     var maskFile = req.file;
     var case_id = req.body.case_id;
     var execution_id = req.body.execution_id;
-
     if(maskFile && case_id && execution_id) {
         var filePath = maskFile.path;
-
-        var job = queue.create("order", {
+        var job = queue.create("MaskOrder", {
             maskFilePath: filePath,
             case_id: case_id,
             title: "Case_id: "+case_id + " Execution_id: "+execution_id,
@@ -153,9 +168,7 @@ router.post('/postAnnotation', upload.single('mask'), function(req, res, next){
             } else {
                 return res.status(500).json({"Status": "Failed"});
             }
-
         });
-
     } else {
         var error_str = "";
         if(!maskFile)
@@ -164,12 +177,9 @@ router.post('/postAnnotation', upload.single('mask'), function(req, res, next){
             error_str += " imageId ";
         if(!userId)
             error_str += " userId ";
-
         return res.status(400).send("Couldn't find :"+error_str);
     }
-
 });
-
 
 
 module.exports = router;
