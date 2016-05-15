@@ -87,6 +87,21 @@ var postMarkupToBindaas = function postMarkupToBindaas(payLoad, callback) {
 
 };
 
+var fetchMetaData = function fetchMetaData(case_id, callback){
+    var bindaas_host = config.bindaas_host;
+    var bindaas_project = config.bindaas_metadata_project;
+    var bindaas_provider = config.bindaas_metadata_provider;
+    var bindaas_api_key = config.bindaas_api_key;
+
+    var bindaas_metadata_endpoint = config.bindaas_metadata_endpoint;
+    var url = bindaas_host + bindaas_project + bindaas_provider + bindaas_metadata_endpoint + "?api_key="+bindaas_api_key + "&TCGAId="+case_id;
+    superagent.get(url)
+        .end(function(err, res){
+            callback(err,res.body);
+        });    
+    
+}
+
 queue.process("MaskOrder", function(job, done) {
     console.log("Executing "+job.data.case_id);
     var case_id = job.data.case_id;
@@ -94,50 +109,59 @@ queue.process("MaskOrder", function(job, done) {
     var filePath=  job.data.maskFilePath;
     var OPENCV_DIR = config.OPENCV_DIR ;
     var MONGODB_LOADER_PATH = config.MONGODB_LOADER_PATH;
-    var conversion_command = "java -Djava.library.path=" + OPENCV_DIR + " -jar " + MONGODB_LOADER_PATH + " --inptype maskfile --inpfile " + filePath + " --dest file --outfolder temp/ --eid " + execution_id + " --etype challenge --cid " + case_id ;
-    winston.log("info", "Executing: " + conversion_command);
-    try {
-        exec(conversion_command, function(error, stdout, stderr){
-            if(error) {
-                winston.log("error", "Converter error");
-                inston.log("error", error);       
-                done("E"+error);
-                return;
-            }
-            if(stderr) {
-                winston.log("error", "Converter error");
-                winston.log("error", stderr);       
-                done("E2"+stderr);
-                return;
-            }
-            winston.log("info", "Converter output");
-            winston.log("info", stdout);
-            parseGeoJSONFileAndClean(filePath, function(err, payLoads){
-                async.map(payLoads, function(payLoad, cb){
-                    postMarkupToBindaas(payLoad, function(err, post_response){
-                        if(err.statusCode != 200){
-                            done(err); //Send error to Kue
-                            return; 
-                        } else {
-                            cb(null);
-                        }
-                    });
+
+    fetchMetaData(case_id, function(err, metadata){
+        console.log(metadata.body);
+        console.log(metadata);
+        var width = metadata[0].width;
+        var height = metadata[0].height;
+        var norm = width +","+height;
+        var conversion_command = "java -Djava.library.path=" + OPENCV_DIR + " -jar " + MONGODB_LOADER_PATH + " --inptype maskfile --inpfile " + filePath + " --dest file --outfolder temp/ --eid " + execution_id + " --etype challenge --cid " + case_id + " --norm "+norm ;
+        winston.log("info", "Executing: " + conversion_command);
+        try {
+            exec(conversion_command, function(error, stdout, stderr){
+                if(error) {
+                    winston.log("error", "Converter error");
+                    winston.log("error", error);       
+                    done("E"+error);
+                    return;
                 }
-                , function(err, results){
-                    console.log("Finished");
-                    done(err);
-                })
-                
+                if(stderr) {
+                    winston.log("error", "Converter error");
+                    winston.log("error", stderr);       
+                    done("E2"+stderr);
+                    return;
+                }
+                winston.log("info", "Converter output");
+                winston.log("info", stdout);
+                parseGeoJSONFileAndClean(filePath, function(err, payLoads){
+                    async.map(payLoads, function(payLoad, cb){
+                        postMarkupToBindaas(payLoad, function(err, post_response){
+                            if(err.statusCode != 200){
+                                done(err); //Send error to Kue
+                                return; 
+                            } else {
+                                cb(null);
+                            }
+                        });
+                    }
+                    , function(err, results){
+                        console.log("Finished");
+                        done(err);
+                    })
+                    
+                });
             });
-        });
+            
         
-    
-    } catch(e) {
-        winston.log("error", "Converter error");
-        winston.log("error", e);
-        done(e);
-        return;
-    }
+        } catch(e) {
+            winston.log("error", "Converter error");
+            winston.log("error", e);
+            done(e);
+            return;
+        }
+        
+    });
 });
 
 
