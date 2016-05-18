@@ -110,6 +110,8 @@ queue.process("MaskOrder", function(job, done) {
     var filePath=  job.data.maskFilePath;
     var OPENCV_DIR = config.OPENCV_DIR ;
     var MONGODB_LOADER_PATH = config.MONGODB_LOADER_PATH;
+    var x = job.data.x;
+    var y = job.data.y;
     /*
     fetchMetaData(case_id, function(err, metadata){
 	console.log(err)
@@ -120,7 +122,8 @@ queue.process("MaskOrder", function(job, done) {
         //var height = metadata[0].height;
     */
         var norm = job.data.width +","+job.data.height;
-        var conversion_command = "java -Djava.library.path=" + OPENCV_DIR + " -jar " + MONGODB_LOADER_PATH + " --inptype maskfile --inpfile " + filePath + " --dest file --outfolder temp/ --eid " + execution_id + " --etype challenge --cid " + case_id + " --norm "+norm ;
+	var shift = job.data.x + "," + job.data.y;
+        var conversion_command = "java -Djava.library.path=" + OPENCV_DIR + " -jar " + MONGODB_LOADER_PATH + " --inptype maskfile --inpfile " + filePath + " --dest file --outfolder temp/ --eid " + execution_id + " --etype challenge --cid " + case_id + " --norm "+norm  + " --shift "+ shift;
         winston.log("info", "Executing: " + conversion_command);
         try {
             exec(conversion_command, function(error, stdout, stderr){
@@ -139,6 +142,7 @@ queue.process("MaskOrder", function(job, done) {
                 winston.log("info", "Converter output");
                 winston.log("info", stdout);
                 parseGeoJSONFileAndClean(filePath, function(err, payLoads){
+	            job.log("Generated "+ payLoads.length + " annotations");
                     async.map(payLoads, function(payLoad, cb){
                         postMarkupToBindaas(payLoad, function(err, post_response){
                             if(err.statusCode != 200){
@@ -151,6 +155,7 @@ queue.process("MaskOrder", function(job, done) {
                         });
                     }
                     , function(err, results){
+			
                         console.log("Finished");
                         done(err);
                     })
@@ -181,17 +186,20 @@ router.post('/submitMaskOrder', upload.single('mask'), function(req, res, next){
     var execution_id = req.body.execution_id;
     var width = req.body.width;
     var height = req.body.height;
-    if(maskFile && case_id && execution_id && width && height) {
+    var x = req.body.x;
+    var y = req.body.y;
+    if(maskFile && case_id && execution_id && width && height && x && y) {
         var filePath = maskFile.path;
         var job = queue.create("MaskOrder", {
             maskFilePath: filePath,
             case_id: case_id,
             title: "Case_id: "+case_id + " Execution_id: "+execution_id,
             execution_id: execution_id,
+            x: x, y: y,
             width: width, height: height
         }).save(function(err){
             if(!err){
-
+		job.log("Recieved request");
                 console.log(job)
                 return res.json({
                     "Status": "Queued", "Job": job,
