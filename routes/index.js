@@ -61,7 +61,11 @@ var parseGeoJSONFileAndClean = function parseGeoJSONFileAndClean(maskFilePath, c
             //console.log(lines);           
         }).on('close', function() {
             fs.unlink(geoJSONFile, function(err){
-                if(err) throw err;
+                if(err) {
+			console.log(err);
+			throw err;
+		}
+		console.log("deleting files");
                 callback(err, payLoads);
             })
         });
