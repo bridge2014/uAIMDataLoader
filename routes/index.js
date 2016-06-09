@@ -112,6 +112,7 @@ queue.process("MaskOrder", function(job, done) {
     var MONGODB_LOADER_PATH = config.MONGODB_LOADER_PATH;
     var x = job.data.x;
     var y = job.data.y;
+    var studyid = job.data.studyid;
     /*
     fetchMetaData(case_id, function(err, metadata){
 	console.log(err)
@@ -123,7 +124,7 @@ queue.process("MaskOrder", function(job, done) {
     */
         var norm = job.data.width +","+job.data.height;
 	var shift = job.data.x + "," + job.data.y;
-        var conversion_command = "java -Djava.library.path=" + OPENCV_DIR + " -jar " + MONGODB_LOADER_PATH + " --inptype maskfile --inpfile " + filePath + " --dest file --outfolder temp/ --eid " + execution_id + " --etype challenge --cid " + case_id + " --norm "+norm  + " --shift "+ shift;
+        var conversion_command = "java -Djava.library.path=" + OPENCV_DIR + " -jar " + MONGODB_LOADER_PATH + " --inptype maskfile --inpfile " + filePath + " --dest file --outfolder temp/ --eid " + execution_id + " --etype challenge --cid " + case_id + " --norm "+norm  + " --shift "+ shift + " --studyid "+studyid;
         winston.log("info", "Executing: " + conversion_command);
         try {
             exec(conversion_command, function(error, stdout, stderr){
@@ -188,7 +189,8 @@ router.post('/submitMaskOrder', upload.single('mask'), function(req, res, next){
     var height = req.body.height;
     var x = req.body.x;
     var y = req.body.y;
-    if(maskFile && case_id && execution_id && width && height && x && y) {
+    var studyid = req.body.study_id;
+    if(maskFile && case_id && execution_id && width && height && x && y && studyid) {
         var filePath = maskFile.path;
         var job = queue.create("MaskOrder", {
             maskFilePath: filePath,
@@ -196,7 +198,7 @@ router.post('/submitMaskOrder', upload.single('mask'), function(req, res, next){
             title: "Case_id: "+case_id + " Execution_id: "+execution_id,
             execution_id: execution_id,
             x: x, y: y,
-            width: width, height: height
+            width: width, height: height, studyid: studyid
         }).save(function(err){
             if(!err){
 		job.log("Recieved request");
