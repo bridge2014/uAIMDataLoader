@@ -124,7 +124,6 @@ queue.process("MaskOrder", function(job, done) {
     var MONGODB_LOADER_PATH = config.MONGODB_LOADER_PATH;
     var x = job.data.x;
     var y = job.data.y;
-<<<<<<< HEAD
     var studyid = job.data.studyid;
     /*
     fetchMetaData(case_id, function(err, metadata){
@@ -138,13 +137,7 @@ queue.process("MaskOrder", function(job, done) {
         var norm = job.data.width +","+job.data.height;
 	var shift = job.data.x + "," + job.data.y;
         var conversion_command = "java -Djava.library.path=" + OPENCV_DIR + " -jar " + MONGODB_LOADER_PATH + " --inptype maskfile --inpfile " + filePath + " --dest file --outfolder temp/ --eid " + execution_id + " --etype challenge --cid " + case_id + " --norm "+norm  + " --shift "+ shift + " --studyid "+studyid;
-=======
-    var study_id = job.data.study_id;
 
-        var norm = job.data.width +","+job.data.height;
-	var shift = job.data.x + "," + job.data.y;
-        var conversion_command = "java -Djava.library.path=" + OPENCV_DIR + " -jar " + MONGODB_LOADER_PATH + " --inptype maskfile --inpfile " + filePath + " --dest file --outfolder temp/ --eid " + execution_id + " --etype challenge --cid " + case_id + " --studyid "+study_id+ " --norm "+norm  + " --shift "+ shift;
->>>>>>> 63f78e0969ed8ae34f0d8a60da9065d54c79d54d
         winston.log("info", "Executing: " + conversion_command);
         try {
             exec(conversion_command, function(error, stdout, stderr){
