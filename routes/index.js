@@ -58,10 +58,14 @@ var parseGeoJSONFileAndClean = function parseGeoJSONFileAndClean(maskFilePath, c
             console.log("............");
             payLoads.push(JSON.parse(line));
             lines++;
-            console.log(lines);           
+            //console.log(lines);           
         }).on('close', function() {
             fs.unlink(geoJSONFile, function(err){
-                if(err) throw err;
+                if(err) {
+			console.log(err);
+			throw err;
+		}
+		console.log("deleting files");
                 callback(err, payLoads);
             })
         });
@@ -71,21 +75,6 @@ var parseGeoJSONFileAndClean = function parseGeoJSONFileAndClean(maskFilePath, c
     }
 }
 
-var postMarkupToBindaas = function postMarkupToBindaas(payLoad, callback) {
-    var bindaas_host = config.bindaas_host;
-    var bindaas_project = config.bindaas_project;
-    var bindaas_provider = config.bindaas_provider;
-    var bindaas_api_key = config.bindaas_api_key;                
-    
-
-    var url = bindaas_host + bindaas_project + bindaas_provider + "/submit/json?api_key="+bindaas_api_key;
-    superagent.post(url)
-        .send(payLoad)
-        .end(function(err, res){
-            callback(err,res);
-        });    
-
-};
 
 var fetchMetaData = function fetchMetaData(case_id, callback){
     var bindaas_host = config.bindaas_host;
@@ -103,7 +92,30 @@ var fetchMetaData = function fetchMetaData(case_id, callback){
     
 }
 
+var postMarkupToBindaas = function postMarkupToBindaas(payLoad, callback) {
+    var bindaas_host = config.bindaas_host;
+    var bindaas_project = config.bindaas_project;
+    var bindaas_provider = config.bindaas_provider;
+    var bindaas_api_key = config.bindaas_api_key;                
+    
+
+    var url = bindaas_host + bindaas_project + bindaas_provider + "/submit/json?api_key="+bindaas_api_key;
+    superagent.post(url)
+        .send(payLoad)
+        .end(function(err, res){
+            callback(err,res);
+        });    
+
+};
 queue.process("MaskOrder", function(job, done) {
+
+    var bindaas_host = config.bindaas_host;
+    var bindaas_project = config.bindaas_project;
+    var bindaas_provider = config.bindaas_provider;
+    var bindaas_api_key = config.bindaas_api_key;
+
+
+
     console.log("Executing "+job.data.case_id);
     var case_id = job.data.case_id;
     var execution_id = job.data.execution_id;
@@ -112,6 +124,7 @@ queue.process("MaskOrder", function(job, done) {
     var MONGODB_LOADER_PATH = config.MONGODB_LOADER_PATH;
     var x = job.data.x;
     var y = job.data.y;
+<<<<<<< HEAD
     var studyid = job.data.studyid;
     /*
     fetchMetaData(case_id, function(err, metadata){
@@ -125,6 +138,13 @@ queue.process("MaskOrder", function(job, done) {
         var norm = job.data.width +","+job.data.height;
 	var shift = job.data.x + "," + job.data.y;
         var conversion_command = "java -Djava.library.path=" + OPENCV_DIR + " -jar " + MONGODB_LOADER_PATH + " --inptype maskfile --inpfile " + filePath + " --dest file --outfolder temp/ --eid " + execution_id + " --etype challenge --cid " + case_id + " --norm "+norm  + " --shift "+ shift + " --studyid "+studyid;
+=======
+    var study_id = job.data.study_id;
+
+        var norm = job.data.width +","+job.data.height;
+	var shift = job.data.x + "," + job.data.y;
+        var conversion_command = "java -Djava.library.path=" + OPENCV_DIR + " -jar " + MONGODB_LOADER_PATH + " --inptype maskfile --inpfile " + filePath + " --dest file --outfolder temp/ --eid " + execution_id + " --etype challenge --cid " + case_id + " --studyid "+study_id+ " --norm "+norm  + " --shift "+ shift;
+>>>>>>> 63f78e0969ed8ae34f0d8a60da9065d54c79d54d
         winston.log("info", "Executing: " + conversion_command);
         try {
             exec(conversion_command, function(error, stdout, stderr){
@@ -142,12 +162,20 @@ queue.process("MaskOrder", function(job, done) {
                 }
                 winston.log("info", "Converter output");
                 winston.log("info", stdout);
+
+		var algorithmsForImagesURL = bindaas_host + bindaas_project + "/MarkupsForImages"+ "/submit/json" + "?api_key="+bindaas_api_key;
+		var algorithmsForImagesData = {
+			"case_id": case_id,
+			"execution_id": execution_id,
+			"title": execution_id
+		}
                 parseGeoJSONFileAndClean(filePath, function(err, payLoads){
 	            job.log("Generated "+ payLoads.length + " annotations");
                     async.map(payLoads, function(payLoad, cb){
                         postMarkupToBindaas(payLoad, function(err, post_response){
                             if(err.statusCode != 200){
-				console.log(err);
+				//console.log(err);
+				console.log("Error "+err.statusCode);
                                 done(err); //Send error to Kue
                                 return; 
                             } else {
@@ -156,9 +184,18 @@ queue.process("MaskOrder", function(job, done) {
                         });
                     }
                     , function(err, results){
-			
-                        console.log("Finished");
-                        done(err);
+			superagent.post(algorithmsForImagesURL)
+				.send(algorithmsForImagesData)
+				.end(function(err, res){
+					if(err.statusCode != 200){
+						console.log("Error posting to " + algorithmsForImagesURL);
+						done(err);
+						return;
+					}
+		                        console.log("Finished");
+                		        done();
+				});
+
                     })
                     
                 });
@@ -189,9 +226,13 @@ router.post('/submitMaskOrder', upload.single('mask'), function(req, res, next){
     var height = req.body.height;
     var x = req.body.x;
     var y = req.body.y;
+
     var studyid = req.body.study_id;
     if(maskFile && case_id && execution_id && width && height && x && y && studyid) {
+
         var filePath = maskFile.path;
+
+	study_id = study_id || case_id;
         var job = queue.create("MaskOrder", {
             maskFilePath: filePath,
             case_id: case_id,
@@ -202,7 +243,7 @@ router.post('/submitMaskOrder', upload.single('mask'), function(req, res, next){
         }).save(function(err){
             if(!err){
 		job.log("Recieved request");
-                console.log(job)
+                //console.log(job)
                 return res.json({
                     "Status": "Queued", "Job": job,
                     "id": job.id
