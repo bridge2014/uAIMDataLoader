@@ -39,6 +39,11 @@ router.get('/', function(req, res, next) {
 
 i*/
 
+var escapeShell = function(cmd){
+  return '"'+cmd.replace(/(["\s'$`\\])/g,'\\$1')+'"';
+
+}
+
 var parseGeoJSONFileAndClean = function parseGeoJSONFileAndClean(maskFilePath, callback){
     var maskFilePath = maskFilePath;
     var maskFileName = maskFilePath.split("/");
@@ -136,8 +141,8 @@ queue.process("MaskOrder", function(job, done) {
     */
         var norm = job.data.width +","+job.data.height;
 	var shift = job.data.x + "," + job.data.y;
-        var conversion_command = "java -Djava.library.path=" + OPENCV_DIR + " -jar " + MONGODB_LOADER_PATH + " --inptype maskfile --inpfile " + filePath + " --dest file --outfolder temp/ --eid " + execution_id + " --etype challenge --cid " + case_id + " --norm "+norm  + " --shift "+ shift + " --studyid "+studyid;
-
+        var conversion_command = "java -Djava.library.path=" + OPENCV_DIR + " -jar " + MONGODB_LOADER_PATH + " --inptype maskfile --inpfile " + escapeShell(filePath) + " --dest file --outfolder temp/ --eid " + escapeShell(execution_id) + " --etype challenge --cid " + escapeShell(case_id) + " --norm "+norm  + " --shift "+ shift + " --studyid "+escapeShell(studyid);
+	//conversion_command = escapeShell(conversion_command);
         winston.log("info", "Executing: " + conversion_command);
         try {
             exec(conversion_command, function(error, stdout, stderr){
@@ -221,11 +226,11 @@ router.post('/submitMaskOrder', upload.single('mask'), function(req, res, next){
     var y = req.body.y;
 
     var studyid = req.body.study_id;
-    if(maskFile && case_id && execution_id && width && height && x && y && studyid) {
+    if(maskFile && case_id && execution_id && width && height && x && y) {
 
         var filePath = maskFile.path;
 
-	study_id = study_id || case_id;
+	studyid = studyid || case_id;
         var job = queue.create("MaskOrder", {
             maskFilePath: filePath,
             case_id: case_id,
