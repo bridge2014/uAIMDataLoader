@@ -210,9 +210,83 @@ queue.process("MaskOrder", function(job, done) {
     //});
 });
 
+queue.process("ZipOrder", function(job, done) {
+
+    var filePath = job.data.zipFilePath;
+    console.log(filePath);
+    console.log("Executing "+job.data.case_id);
+
+        var conversion_command = "run_featuredb_quip_zip.sh loadquip --dbname Camicroscope --dbhost 172.17.0.2 --dbport 27017 --quip "+filePath; 
+        console.log(conversion_command);
+        //var conversion_command = "java -Djava.library.path=" + OPENCV_DIR + " -jar " + MONGODB_LOADER_PATH + " --inptype maskfile --inpfile " + escapeShell(filePath) + " --dest file --outfolder temp/ --eid " + escapeShell(execution_id) + " --etype challenge --cid " + escapeShell(case_id) + " --norm "+norm  + " --shift "+ shift + " --studyid "+escapeShell(studyid);
+	//conversion_command = escapeShell(conversion_command);
+        //winston.log("info", "Executing: " + conversion_command);
+        try {
+            exec(conversion_command, function(error, stdout, stderr){
+                if(error) {
+                    winston.log("error", "Converter error");
+                    winston.log("error", error);       
+                    done("E"+error);
+                    return;
+                }
+                if(stderr) {
+                    winston.log("error", "Converter error");
+                    winston.log("error", stderr);       
+                    done("E2"+stderr);
+                    return;
+                }
+                winston.log("info", "Converter output");
+                winston.log("info", stdout);
+                /* Remove the zip file*/
+                fs.unlink(filePath, function(err){
+                    if(err) {
+                        done(err);
+                    }
+                    console.log("done!: removed file"); 
+                    done();
+                });
+            });        
+        } catch(e) {
+            winston.log("error", "Converter error");
+            winston.log("error", e);
+            done(e);
+            return;
+        }
+        
+    //});
+});
+
 
 router.post('/submitMarkupOrder', upload.single('markup'), function(req, res, next){
     postMarkupToBindaas();
+});
+router.get('/hello', function(req, res){
+    return res.json({});
+});
+
+router.post('/submitZipOrder', upload.single('zip'), function(req, res, next){
+    
+    var zipFile = req.file;
+    var case_id = req.body.case_id;
+
+    if(case_id){
+        console.log(zipFile.path);
+        console.log(case_id);
+        var job = queue.create("ZipOrder", {
+            case_id: case_id,
+            zipFilePath: zipFile.path
+        }).save(function(err){
+            if(!err){
+                return res.json({"Status": "Queued", "Job": job, "id": job.id});
+            } else {
+                return res.status(500).json({"Status": "Failed: "+err});
+            }
+        });
+    } else {
+        return res.status(400).send("Couldn't find case_id");
+    }
+
+
 });
 
 router.post('/submitMaskOrder', upload.single('mask'), function(req, res, next){
