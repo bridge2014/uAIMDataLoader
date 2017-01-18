@@ -211,12 +211,13 @@ queue.process("MaskOrder", function(job, done) {
 });
 
 queue.process("ZipOrder", function(job, done) {
-
+    var mongo_host = config.mongo_host;
+    var mongo_port = config.mongo_port;
     var filePath = job.data.zipFilePath;
     console.log(filePath);
     console.log("Executing "+job.data.case_id);
 
-        var conversion_command = "run_featuredb_quip_zip.sh loadquip --dbname Camicroscope --dbhost 172.17.0.2 --dbport 27017 --quip "+filePath; 
+        var conversion_command = "run_featuredb_quip_zip.sh loadquip --dbname quip --dbhost " +mongo_host +" --dbport "+ mongo_port +" --quip "+filePath; 
         console.log(conversion_command);
         //var conversion_command = "java -Djava.library.path=" + OPENCV_DIR + " -jar " + MONGODB_LOADER_PATH + " --inptype maskfile --inpfile " + escapeShell(filePath) + " --dest file --outfolder temp/ --eid " + escapeShell(execution_id) + " --etype challenge --cid " + escapeShell(case_id) + " --norm "+norm  + " --shift "+ shift + " --studyid "+escapeShell(studyid);
 	//conversion_command = escapeShell(conversion_command);
