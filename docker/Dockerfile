@@ -90,7 +90,7 @@ WORKDIR /root/annotationloader
 RUN npm install 
 
 RUN npm install yargs   #Annoying unlisted kue dependency
-COPY config.js.annotationsloader config.js
+COPY /root/annotationloader/docker/config.js.annotationsloader config.js
 
 
 WORKDIR /root
@@ -126,9 +126,9 @@ RUN git clone https://github.com/SBU-BMI/pathomics_featuredb && \
 	cp $FEATUREDB_DIR/script/run* /usr/local/bin/. && \
 	cd /tmp
 
-COPY redis.conf /etc/redis/redis.conf
+COPY /root/annotationloader/docker/redis.conf /etc/redis/redis.conf
 
 WORKDIR /root
-COPY run.sh /root/
+COPY /root/annotationloader/docker/run.sh /root/
 
 CMD ["sh", "run.sh"]
