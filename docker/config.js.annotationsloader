@@ -8,7 +8,7 @@ var bindaas_project = process.env.annotations_project || "/Camicroscope_Annotati
 var bindaas_provider = process.env.annotations_provider || "/MarkupLoader";
 var bindaas_api_key = process.env.annotations_api_key || "APIKEY";
 
-var mongo_host = process.env.mongo_host;
+var mongo_host = process.env.mongo_host || "http://camicroscope-mongo:9099";
 var mongo_port = process.env.mongo_port || 27017;
 
 bindaas_host = bindaas_host + "/services" ;
