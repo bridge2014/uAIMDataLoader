@@ -1,7 +1,7 @@
 #!/bin/bash
 execstack -c /root/OpenCV/opencv-3.0.0/build/lib/libopencv_java300.so &
 #service redis-server start
-/usr/bin/redis-server /etc/redis.conf &
+/usr/bin/redis-server /etc/redis/redis.conf &
 
 #Get API key from bindaas
 #alias api_k="eval $(python createUser.py loasdderi1@qui1zsadfdiasd)";
